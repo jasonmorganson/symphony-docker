@@ -17,7 +17,7 @@ SYMPHONY_WORKSPACE_ROOT = ".symphony/workspaces"
 
 [daemons.dashboard-proxy]
 depends = ["symphony"]
-run = "exec socat TCP-LISTEN:4410,bind=$(hostname -i | awk '{print $1}'),fork,reuseaddr TCP:127.0.0.1:4410"
+run = "until curl --silent --output /dev/null http://127.0.0.1:4410/; do sleep 1; done; exec socat TCP-LISTEN:4410,bind=$(hostname -i | awk '{print $1}'),fork,reuseaddr TCP:127.0.0.1:4410"
 dir = "/workspaces/arrusted-development"
 boot_start = true
 retry = true
