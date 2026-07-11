@@ -11,8 +11,9 @@ sessions:
     command: >-
       sh -lc 'sudo mkdir -p /.namespace/tasks && sudo touch /.namespace/tasks/symphony;
       if ! test -f /workspaces/arrusted-development/WORKFLOW.md; then
-      sudo rm -rf /workspaces/arrusted-development;
-      git clone https://github.com/withAutograph/arrusted-development.git /workspaces/arrusted-development;
+      until GIT_TERMINAL_PROMPT=0 git clone https://github.com/withAutograph/arrusted-development.git /workspaces/arrusted-development; do
+      sudo rm -rf /workspaces/arrusted-development; sleep 2;
+      done;
       fi;
       cd /workspaces/arrusted-development;
       exec /usr/local/bin/container-entrypoint'

@@ -30,3 +30,4 @@ sed \
   > "$spec"
 
 devbox create --from "$spec"
+devbox setup-github arrusted-symphony
