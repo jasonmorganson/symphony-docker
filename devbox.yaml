@@ -1,6 +1,11 @@
 name: arrusted-symphony
 image: arrusted/symphony
 size: m
+repository:
+  disabled: true
+integrations:
+  github:
+    share_auth: true
 sessions:
   - name: symphony
     command: >-
