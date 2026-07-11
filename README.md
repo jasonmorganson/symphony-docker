@@ -1,6 +1,6 @@
 # Symphony Docker
 
-A reproducible [Namespace Devbox](https://namespace.so/docs/devbox/images) image for the experimental Elixir implementation of [OpenAI Symphony](https://github.com/openai/symphony). The image runs [Pitchfork](https://pitchfork.jdx.dev/guides/container-mode.html) as PID 1 and boots Symphony from the checked-out Arrusted workflow.
+A reproducible [Namespace Devbox](https://namespace.so/docs/devbox/images) image for the experimental Elixir implementation of [OpenAI Symphony](https://github.com/openai/symphony). In a standard Docker container the image runs [Pitchfork](https://pitchfork.jdx.dev/guides/container-mode.html) as PID 1 and boots Symphony from the checked-out Arrusted workflow. Namespace replaces image entrypoints with its Devbox agent, so Pitchfork runs as a supervised child there.
 
 ## Included software
 
@@ -63,6 +63,13 @@ bin/create-devbox
 devbox ssh arrusted-symphony
 ```
 
+Namespace does not execute custom-image entrypoints. After the checkout is ready, start the supervisor from the Devbox (repeat this after a Devbox restart):
+
+```sh
+devbox ssh arrusted-symphony -- \
+  'cd /workspaces/arrusted-development && nohup /usr/local/bin/container-entrypoint > /tmp/pitchfork-supervisor.log 2>&1 < /dev/null &'
+```
+
 Before allowing Symphony to dispatch work, confirm the Devbox checkout integration also authenticates the SSH clone used by Arrusted's `hooks.after_create`:
 
 ```sh
@@ -87,7 +94,7 @@ devbox port-forward arrusted-symphony --ports 4410
 
 Then open <http://127.0.0.1:4410/>. Symphony remains loopback-only; the bundled `dashboard-proxy` daemon listens only on the Devbox interface and relays port 4410 so Namespace can forward it without exposing public ingress.
 
-Stop or restart the Devbox with the Namespace CLI. Pitchfork's container mode handles `SIGTERM` and `SIGINT`, shuts down Symphony, and reaps orphaned processes. On restart, the image entrypoint runs `pitchfork supervisor run --container --boot`, and `boot_start = true` restores Symphony automatically.
+In ordinary Docker, Pitchfork's container mode handles `SIGTERM` and `SIGINT`, shuts down Symphony, and reaps orphaned processes. Namespace owns PID 1 and does not execute the image entrypoint; after a Devbox restart, run the supervisor command above again. Once invoked, `boot_start = true` restores both configured daemons.
 
 ## Upgrade Symphony
 
