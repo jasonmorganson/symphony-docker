@@ -1,12 +1,14 @@
 name: arrusted-symphony
 image: arrusted/symphony
 size: m
-repository: github.com/withAutograph/arrusted-development
 sessions:
   - name: symphony
     command: >-
       sh -lc 'sudo mkdir -p /.namespace/tasks && sudo touch /.namespace/tasks/symphony;
-      until test -f /workspaces/arrusted-development/WORKFLOW.md; do sleep 2; done;
+      if ! test -f /workspaces/arrusted-development/WORKFLOW.md; then
+      sudo rm -rf /workspaces/arrusted-development;
+      git clone https://github.com/withAutograph/arrusted-development.git /workspaces/arrusted-development;
+      fi;
       cd /workspaces/arrusted-development;
       exec /usr/local/bin/container-entrypoint'
 env:

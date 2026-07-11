@@ -56,7 +56,7 @@ The values are injected at boot. The bundled fnox configuration declares both na
 
 ## Create and operate the Devbox
 
-Create the persistent medium Devbox and connect to it. Do not pass `devbox.yaml` directly to `devbox create`; it is a template consumed by the validating wrapper. The spec creates a named `symphony` session automatically, waits for the repository checkout, marks Symphony as ongoing Namespace work to prevent idle shutdown, and then starts Pitchfork.
+Create the persistent medium Devbox and connect to it. Do not pass `devbox.yaml` directly to `devbox create`; it is a template consumed by the validating wrapper. The spec creates a named `symphony` session automatically, clones the repository when the persistent checkout is absent, marks Symphony as ongoing Namespace work to prevent idle shutdown, and then starts Pitchfork.
 
 ```sh
 bin/create-devbox
