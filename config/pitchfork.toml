@@ -1,0 +1,23 @@
+#:schema https://pitchfork.jdx.dev/schema.json
+
+[settings.supervisor]
+container = true
+
+[daemons.symphony]
+auto = ["start"]
+run = "mise exec --command 'exec fnox exec -- symphony --i-understand-that-this-will-be-running-without-the-usual-guardrails --port \"$PORT\"'"
+dir = "/workspaces/arrusted-development"
+port = { expect = [4410], bump = false }
+ready_output = "Dashboard: http://127\\.0\\.0\\.1:[0-9]+/"
+boot_start = true
+retry = true
+
+[daemons.symphony.env]
+SYMPHONY_WORKSPACE_ROOT = ".symphony/workspaces"
+
+[daemons.dashboard-proxy]
+depends = ["symphony"]
+run = "exec socat TCP-LISTEN:4410,bind=$(hostname -i | awk '{print $1}'),fork,reuseaddr TCP:127.0.0.1:4410"
+dir = "/workspaces/arrusted-development"
+boot_start = true
+retry = true

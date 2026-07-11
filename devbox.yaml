@@ -1,0 +1,9 @@
+name: arrusted-symphony
+image: arrusted/symphony
+size: m
+repository: github.com/withAutograph/arrusted-development
+env:
+  - name: LINEAR_API_KEY
+    from_secret_id: REPLACE_WITH_LINEAR_SECRET_ID
+  - name: OPENAI_API_KEY
+    from_secret_id: REPLACE_WITH_OPENAI_SECRET_ID

@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+workflow=/workspaces/arrusted-development/WORKFLOW.md
+
+if [ ! -f "$workflow" ]; then
+  echo "Missing $workflow; Namespace must check out github.com/withAutograph/arrusted-development before startup." >&2
+  exit 1
+fi
+
+mkdir -p "$SYMPHONY_WORKSPACE_ROOT"
+
+exec pitchfork supervisor run --container --boot

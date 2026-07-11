@@ -1,0 +1,10 @@
+#:schema https://fnox.jdx.dev/schema.json
+
+if_missing = "error"
+
+[providers.environment]
+type = "plain"
+
+[secrets]
+LINEAR_API_KEY = { provider = "environment", description = "Linear API key for Symphony", if_missing = "error" }
+OPENAI_API_KEY = { provider = "environment", description = "OpenAI API key for Symphony", if_missing = "error" }

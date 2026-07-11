@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec mise exec erlang@28.5 elixir@1.19.5-otp-28 -- /opt/symphony/elixir/bin/symphony "$@"
