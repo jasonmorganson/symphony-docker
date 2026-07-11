@@ -21,6 +21,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     FNOX_NON_INTERACTIVE=true \
     PITCHFORK_STATE_DIR=/var/lib/pitchfork \
     SYMPHONY_WORKSPACE_ROOT=/workspaces/arrusted-development/.symphony/workspaces \
+    MISE_TRUSTED_CONFIG_PATHS=/workspaces/arrusted-development \
     PATH=/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN apt-get update \
