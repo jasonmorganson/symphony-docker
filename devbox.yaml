@@ -15,6 +15,8 @@ sessions:
       sudo rm -rf /workspaces/arrusted-development; sleep 2;
       done;
       fi;
+      git config --global url.https://github.com/.insteadOf git@github.com:;
+      printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null;
       cd /workspaces/arrusted-development;
       exec /usr/local/bin/container-entrypoint'
 env:

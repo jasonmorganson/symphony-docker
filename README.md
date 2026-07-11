@@ -56,7 +56,7 @@ The values are injected at boot. The bundled fnox configuration declares both na
 
 ## Create and operate the Devbox
 
-Create the persistent medium Devbox and connect to it. Do not pass `devbox.yaml` directly to `devbox create`; it is a template consumed by the validating wrapper. The wrapper transfers the locally authenticated GitHub CLI credentials; the spec creates a named `symphony` session automatically, retries the clone until authentication is ready when the persistent checkout is absent, marks Symphony as ongoing Namespace work to prevent idle shutdown, and then starts Pitchfork.
+Create the persistent medium Devbox and connect to it. Do not pass `devbox.yaml` directly to `devbox create`; it is a template consumed by the validating wrapper. The wrapper transfers the locally authenticated GitHub CLI credentials; the spec creates a named `symphony` session automatically, retries the clone until authentication is ready when the persistent checkout is absent, routes SSH-style GitHub clone URLs through those HTTPS credentials for Symphony workspaces, logs Codex in non-interactively with the injected API key, marks Symphony as ongoing Namespace work to prevent idle shutdown, and then starts Pitchfork.
 
 ```sh
 bin/create-devbox
