@@ -1,5 +1,0 @@
-#!/bin/sh
-set -eu
-
-tag=${1:-symphony-docker:latest}
-nsc build . --platform linux/amd64 --name "$tag" --push

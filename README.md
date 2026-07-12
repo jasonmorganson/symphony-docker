@@ -1,8 +1,8 @@
 # Symphony Docker
 
-A reproducible, long-running Docker deployment of the experimental Elixir implementation of [OpenAI Symphony](https://github.com/openai/symphony) on a bare [Namespace compute instance](https://namespace.so/docs/architecture/compute). Pitchfork runs as PID 1 and supervises Symphony. Docker uses `--restart unless-stopped`, so the service returns after a process, Docker daemon, or compute-instance restart.
+A reproducible, long-running Docker deployment of the experimental Elixir implementation of [OpenAI Symphony](https://github.com/openai/symphony) on a persistent Linux VM. The live deployment uses a DigitalOcean Droplet. Pitchfork runs as PID 1 and supervises Symphony. Docker uses `restart: unless-stopped`, so the service returns after a process, Docker daemon, or VM restart.
 
-This deployment is separate from `symphony-k8s`. It runs one Docker container on one bare compute instance and does not require Kubernetes.
+This deployment is separate from `symphony-k8s`. It runs one Docker container on one VM and does not require Kubernetes.
 
 ## Included software
 
@@ -17,78 +17,68 @@ The image contains no API keys, encrypted secret payloads, or private SSH keys. 
 
 ## Prerequisites
 
-Authenticate `nsc` and `gh`. The local fnox configuration must resolve `LINEAR_API_KEY` and `OPENAI_API_KEY` without printing them:
+Provision a persistent Linux VM with Docker and SSH access. The operator must have `gh` authentication and a secret source for `LINEAR_API_KEY` and `OPENAI_API_KEY`:
 
 ```sh
-nsc auth status
 gh auth status
 fnox check
 ```
 
-The GitHub token is transferred through a mode-0600 temporary file and installed as `/etc/symphony.env` on the instance. Secret values never appear in the image, build arguments, command arguments, or repository. Use narrowly scoped, revocable credentials dedicated to Symphony.
+Install the three credentials as `/etc/symphony/runtime.env`, owned by root and mode `0600`. Secret values must never appear in the image, build arguments, command arguments, logs, or repository. Use narrowly scoped, revocable credentials dedicated to Symphony.
 
-## Build and deploy
+## Build and deploy on a VM
 
-Build the pinned amd64 image in Namespace and push it to the workspace registry:
-
-```sh
-bin/build-image symphony-docker:latest
-```
-
-Set `SYMPHONY_IMAGE` to the resulting `nscr.io/...` image reference, then create the bare compute instance and persistent volume:
+Clone the repository on the VM and build the pinned image natively:
 
 ```sh
-export SYMPHONY_IMAGE=nscr.io/WORKSPACE/symphony-docker:latest
-export SYMPHONY_FNOX_CONFIG=/path/to/fnox.local.toml
-bin/deploy-instance
+git clone https://github.com/jasonmorganson/symphony-docker.git /opt/symphony-docker
+docker compose -f /opt/symphony-docker/compose.yaml build
 ```
 
-The defaults are:
-
-- machine: `linux/amd64:4x8`
-- lease: three hours (the current tenant maximum)
-- instance-local `/workspaces` storage
-- unique instance tag: `arrusted-symphony`
-- dashboard port: 4410
-
-Override the compute defaults with `SYMPHONY_MACHINE_TYPE` or `SYMPHONY_INSTANCE_DURATION`. If persistent volumes are enabled for the Namespace tenant, set `SYMPHONY_PERSISTENT_VOLUME=true`; the volume defaults to the `arrusted-symphony` tag and 150 GB, configurable with `SYMPHONY_VOLUME_SIZE`. This tenant currently rejects persistent-volume attachments, so the live deployment uses instance-local storage. Symphony can recreate issue workspaces from GitHub after reprovisioning, but unpushed local work is lost if the lease expires.
-
-Namespace compute is leased rather than indefinite. Renew it hourly from an external scheduler:
+Create durable workspace directories before starting the container. UID/GID 1001 is the image's non-root `devbox` user:
 
 ```sh
-bin/maintain-instance INSTANCE_ID 2h
+sudo install -d -m 0750 -o 1001 -g 1001 /srv/symphony/workspaces
+sudo install -d -m 0750 -o 1001 -g 1001 /srv/symphony/workspaces/arrusted-development
+sudo docker compose -f /opt/symphony-docker/compose.yaml up -d
 ```
 
-`maintain-instance` renews the lease and fails unless the container, restart policy, Pitchfork daemon, and dashboard are healthy. This tenant caps the deadline at three hours even when a longer duration is requested, so schedule it hourly outside the Namespace instance and alert on any nonzero exit. `renew-instance` is also available when renewal without health checks is explicitly desired. The external job can alert and reprovision if the instance disappears. With persistent volumes enabled, a replacement instance can reattach the same checkout and `.symphony/workspaces`; otherwise it starts from a fresh clone. Symphony issue branches must be pushed promptly and its Linear workpad remains the durable progress record.
+The Compose deployment provides:
 
-The checked-in `Maintain Symphony compute` GitHub Actions workflow performs this control loop at minute 17 of every hour and supports manual dispatch. The official Namespace setup action exchanges GitHub's short-lived OIDC identity, so the workflow has no long-lived Namespace secret to rotate. The Namespace GitHub integration must authorize this repository.
+- a persistent `/srv/symphony/workspaces` checkout and agent workspace root
+- automatic container restoration after Docker or VM restart
+- bounded local Docker logs
+- a health check for the dashboard
+- dashboard port 4410 bound only to VM loopback
+
+Back up `/srv/symphony/workspaces` using VM snapshots or a provider volume backup. Symphony issue branches should still be pushed promptly and its Linear workpad remains the durable progress record.
 
 ## Operate and verify
 
 Inspect the container without exposing its environment:
 
 ```sh
-nsc ssh INSTANCE_ID --disable-pty -- docker ps --filter name=symphony
-nsc ssh INSTANCE_ID --disable-pty -- docker logs --tail 100 symphony
-nsc ssh INSTANCE_ID --disable-pty -- docker exec symphony pitchfork status
-nsc ssh INSTANCE_ID --disable-pty -- docker exec symphony ps -p 1 -o pid=,comm=,args=
+ssh VM docker ps --filter name=symphony
+ssh VM docker logs --tail 100 symphony
+ssh VM docker exec symphony pitchfork status global/symphony
+ssh VM docker exec symphony ps -p 1 -o pid=,comm=,args=
 ```
 
 Forward the private dashboard locally:
 
 ```sh
-nsc instance port-forward INSTANCE_ID --target_port 4410
+ssh -N -L 4410:127.0.0.1:4410 VM
 ```
 
-The command prints the random localhost port it selected; open that URL. Do not expose this dashboard publicly: Symphony runs Codex without its usual guardrails and the dashboard is not an authentication boundary.
+Open `http://127.0.0.1:4410`. Do not expose this dashboard publicly: Symphony runs Codex without its usual guardrails and the dashboard is not an authentication boundary.
 
 Test restart recovery:
 
 ```sh
-nsc ssh INSTANCE_ID --disable-pty -- sh -c \
+ssh VM sh -c \
   'kill -9 "$(docker inspect -f {{.State.Pid}} symphony)"'
 # Docker restores it automatically.
-nsc ssh INSTANCE_ID --disable-pty -- docker ps --filter name=symphony
+ssh VM docker ps --filter name=symphony
 ```
 
 Pitchfork handles `SIGTERM` and `SIGINT`, gracefully shuts down Symphony, and reaps orphaned processes. fnox fails closed if any of `LINEAR_API_KEY`, `OPENAI_API_KEY`, or `GITHUB_TOKEN` is missing.
