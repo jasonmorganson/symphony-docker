@@ -1,0 +1,29 @@
+name: Maintain Symphony compute
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: maintain-symphony-compute
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SYMPHONY_INSTANCE_ID: 89dmk8k3qgp9a
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
+
+      - name: Renew lease and verify Symphony
+        run: bin/maintain-instance "$SYMPHONY_INSTANCE_ID" 2h

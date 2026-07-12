@@ -61,6 +61,8 @@ bin/maintain-instance INSTANCE_ID 2h
 
 `maintain-instance` renews the lease and fails unless the container, restart policy, Pitchfork daemon, and dashboard are healthy. This tenant caps the deadline at three hours even when a longer duration is requested, so schedule it hourly outside the Namespace instance and alert on any nonzero exit. `renew-instance` is also available when renewal without health checks is explicitly desired. The external job can alert and reprovision if the instance disappears. With persistent volumes enabled, a replacement instance can reattach the same checkout and `.symphony/workspaces`; otherwise it starts from a fresh clone. Symphony issue branches must be pushed promptly and its Linear workpad remains the durable progress record.
 
+The checked-in `Maintain Symphony compute` GitHub Actions workflow performs this control loop at minute 17 of every hour and supports manual dispatch. The official Namespace setup action exchanges GitHub's short-lived OIDC identity, so the workflow has no long-lived Namespace secret to rotate. The Namespace GitHub integration must authorize this repository.
+
 ## Operate and verify
 
 Inspect the container without exposing its environment:
