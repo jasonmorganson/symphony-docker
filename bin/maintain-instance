@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+instance_id=${1:?usage: maintain-instance INSTANCE_ID [MINIMUM_DURATION]}
+minimum=${2:-2h}
+
+nsc extend "$instance_id" --ensure_minimum "$minimum"
+nsc ssh "$instance_id" --disable-pty -- sh -s <<'REMOTE'
+set -eu
+test "$(docker inspect -f '{{.State.Status}}' symphony)" = running
+test "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' symphony)" = unless-stopped
+docker exec symphony pitchfork status global/symphony | grep -q 'Status: running'
+docker exec symphony curl --fail --silent --output /dev/null http://127.0.0.1:4410/
+REMOTE

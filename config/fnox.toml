@@ -8,3 +8,4 @@ type = "plain"
 [secrets]
 LINEAR_API_KEY = { provider = "environment", description = "Linear API key for Symphony", if_missing = "error" }
 OPENAI_API_KEY = { provider = "environment", description = "OpenAI API key for Symphony", if_missing = "error" }
+GITHUB_TOKEN = { provider = "environment", description = "GitHub token for private Arrusted workspaces", if_missing = "error" }

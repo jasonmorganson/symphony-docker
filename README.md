@@ -1,6 +1,8 @@
 # Symphony Docker
 
-A reproducible [Namespace Devbox](https://namespace.so/docs/devbox/images) image for the experimental Elixir implementation of [OpenAI Symphony](https://github.com/openai/symphony). In a standard Docker container the image runs [Pitchfork](https://pitchfork.jdx.dev/guides/container-mode.html) as PID 1 and boots Symphony from the checked-out Arrusted workflow. Namespace replaces image entrypoints with its Devbox agent, so Pitchfork runs as a supervised child there.
+A reproducible, long-running Docker deployment of the experimental Elixir implementation of [OpenAI Symphony](https://github.com/openai/symphony) on a bare [Namespace compute instance](https://namespace.so/docs/architecture/compute). Pitchfork runs as PID 1 and supervises Symphony. Docker uses `--restart unless-stopped`, so the service returns after a process, Docker daemon, or compute-instance restart.
+
+This deployment is separate from `symphony-k8s`. It runs one Docker container on one bare compute instance and does not require Kubernetes.
 
 ## Included software
 
@@ -11,100 +13,84 @@ A reproducible [Namespace Devbox](https://namespace.so/docs/devbox/images) image
 - fnox 1.28.0
 - Pitchfork 2.15.0
 
-The image contains no API keys, encrypted secret payloads, or private SSH keys.
+The image contains no API keys, encrypted secret payloads, or private SSH keys. Symphony is preview software and its pinned `mix.lock` reports upstream security advisories, including denial-of-service risks in the dashboard stack. Keep the dashboard private and use this only for trusted repositories and issues.
 
-Symphony is preview software. Its pinned `mix.lock` currently reports upstream security advisories, including denial-of-service risks in the dashboard stack. Keep the dashboard behind Namespace's private port forward, use this image only for trusted repositories and issues, and review advisories whenever advancing the Symphony commit.
+## Prerequisites
 
-## Build the image
-
-Install and authenticate the Namespace Devbox CLI, then build from the repository root:
+Authenticate `nsc` and `gh`. The local fnox configuration must resolve `LINEAR_API_KEY` and `OPENAI_API_KEY` without printing them:
 
 ```sh
-devbox auth check-login
-devbox image build . \
-  --name arrusted/symphony \
-  --description "OpenAI Symphony for Arrusted" \
-  --optimize \
-  --port_forward 4410 \
-  --user devbox \
-  --workspace_dir /workspaces \
-  --persistency whole
+nsc auth status
+gh auth status
+fnox check
 ```
 
-Namespace optimizes the image after a successful build. Rebuilding with the same name updates the image used by new Devboxes; existing Devboxes retain the image version they were created with.
+The GitHub token is transferred through a mode-0600 temporary file and installed as `/etc/symphony.env` on the instance. Secret values never appear in the image, build arguments, command arguments, or repository. Use narrowly scoped, revocable credentials dedicated to Symphony.
 
-For a local smoke build on the host architecture:
+## Build and deploy
+
+Build the pinned amd64 image in Namespace and push it to the workspace registry:
 
 ```sh
-docker build -t symphony-devbox:local .
+bin/build-image symphony-docker:latest
 ```
 
-The Namespace build is the authoritative amd64 proof. Running an amd64 Erlang image through Apple-Silicon emulation can fail in `prim_tty` even when the same image builds natively on Namespace.
-
-## Configure secrets
-
-Create `LINEAR_API_KEY` and `OPENAI_API_KEY` in Namespace Secrets. Enter values through Namespace's hidden-input or web UI flow; do not pass plaintext values as command-line arguments.
-
-Export the resulting Namespace object IDs. The wrapper rejects missing or malformed IDs so the CLI cannot silently omit placeholder secret mappings:
+Set `SYMPHONY_IMAGE` to the resulting `nscr.io/...` image reference, then create the bare compute instance and persistent volume:
 
 ```sh
-export LINEAR_SECRET_ID=sec_...
-export OPENAI_SECRET_ID=sec_...
+export SYMPHONY_IMAGE=nscr.io/WORKSPACE/symphony-docker:latest
+export SYMPHONY_FNOX_CONFIG=/path/to/fnox.local.toml
+bin/deploy-instance
 ```
 
-The values are injected at boot. The bundled fnox configuration declares both names as required and resolves the already-present environment variables, so the daemon keeps the same `fnox exec -- symphony` launch boundary as local development. Use narrowly scoped, revocable credentials dedicated to this trusted Devbox: Symphony deliberately runs Codex without its usual guardrails, and both processes share the injected environment.
+The defaults are:
 
-## Create and operate the Devbox
+- machine: `linux/amd64:4x8`
+- lease: three hours (the current tenant maximum)
+- instance-local `/workspaces` storage
+- unique instance tag: `arrusted-symphony`
+- dashboard port: 4410
 
-Create the persistent medium Devbox and connect to it. Do not pass `devbox.yaml` directly to `devbox create`; it is a template consumed by the validating wrapper. The wrapper transfers the locally authenticated GitHub CLI credentials; the spec creates a named `symphony` session automatically, retries the clone until authentication is ready when the persistent checkout is absent, routes SSH-style GitHub clone URLs through those HTTPS credentials for Symphony workspaces, logs Codex in non-interactively with the injected API key, marks Symphony as ongoing Namespace work to prevent idle shutdown, and then starts Pitchfork.
+Override the compute defaults with `SYMPHONY_MACHINE_TYPE` or `SYMPHONY_INSTANCE_DURATION`. If persistent volumes are enabled for the Namespace tenant, set `SYMPHONY_PERSISTENT_VOLUME=true`; the volume defaults to the `arrusted-symphony` tag and 150 GB, configurable with `SYMPHONY_VOLUME_SIZE`. This tenant currently rejects persistent-volume attachments, so the live deployment uses instance-local storage. Symphony can recreate issue workspaces from GitHub after reprovisioning, but unpushed local work is lost if the lease expires.
+
+Namespace compute is leased rather than indefinite. Renew it hourly from an external scheduler:
 
 ```sh
-bin/create-devbox
-devbox ssh arrusted-symphony
+bin/maintain-instance INSTANCE_ID 2h
 ```
 
-Before allowing Symphony to dispatch work, confirm the Devbox checkout integration also authenticates the SSH clone used by Arrusted's `hooks.after_create`:
+`maintain-instance` renews the lease and fails unless the container, restart policy, Pitchfork daemon, and dashboard are healthy. This tenant caps the deadline at three hours even when a longer duration is requested, so schedule it hourly outside the Namespace instance and alert on any nonzero exit. `renew-instance` is also available when renewal without health checks is explicitly desired. The external job can alert and reprovision if the instance disappears. With persistent volumes enabled, a replacement instance can reattach the same checkout and `.symphony/workspaces`; otherwise it starts from a fresh clone. Symphony issue branches must be pushed promptly and its Linear workpad remains the durable progress record.
+
+## Operate and verify
+
+Inspect the container without exposing its environment:
 
 ```sh
-ssh -o BatchMode=yes -T git@github.com
+nsc ssh INSTANCE_ID --disable-pty -- docker ps --filter name=symphony
+nsc ssh INSTANCE_ID --disable-pty -- docker logs --tail 100 symphony
+nsc ssh INSTANCE_ID --disable-pty -- docker exec symphony pitchfork status
+nsc ssh INSTANCE_ID --disable-pty -- docker exec symphony ps -p 1 -o pid=,comm=,args=
 ```
 
-If that check fails, configure the Devbox's GitHub access with Namespace before starting Symphony. Never bake a deploy key into this image.
-
-Inspect Pitchfork and Symphony:
+Forward the private dashboard locally:
 
 ```sh
-devbox session connect arrusted-symphony --session symphony
-pitchfork status global/symphony
-pitchfork logs global/symphony
-ps -p 1 -o pid=,comm=,args=
+nsc instance port-forward INSTANCE_ID --target_port 4410
 ```
 
-Forward the Symphony dashboard to the local machine:
+The command prints the random localhost port it selected; open that URL. Do not expose this dashboard publicly: Symphony runs Codex without its usual guardrails and the dashboard is not an authentication boundary.
+
+Test restart recovery:
 
 ```sh
-devbox port-forward arrusted-symphony --ports 4410
+nsc ssh INSTANCE_ID --disable-pty -- sh -c \
+  'kill -9 "$(docker inspect -f {{.State.Pid}} symphony)"'
+# Docker restores it automatically.
+nsc ssh INSTANCE_ID --disable-pty -- docker ps --filter name=symphony
 ```
 
-Then open <http://127.0.0.1:4410/>. Symphony remains loopback-only; the bundled `dashboard-proxy` daemon listens only on the Devbox interface and relays port 4410 so Namespace can forward it without exposing public ingress.
-
-In ordinary Docker, Pitchfork's container mode handles `SIGTERM` and `SIGINT`, shuts down Symphony, and reaps orphaned processes. Namespace owns PID 1 and does not execute the image entrypoint; its declarative `symphony` session starts the entrypoint automatically whenever the Devbox starts. Pitchfork's `boot_start = true` then restores both configured daemons.
+Pitchfork handles `SIGTERM` and `SIGINT`, gracefully shuts down Symphony, and reaps orphaned processes. fnox fails closed if any of `LINEAR_API_KEY`, `OPENAI_API_KEY`, or `GITHUB_TOKEN` is missing.
 
 ## Upgrade Symphony
 
-Choose a reviewed upstream commit, then update `SYMPHONY_COMMIT` in `Dockerfile` and the pinned commit listed above. Rebuild the image, create a fresh Devbox, and verify the dashboard and a non-destructive Linear query before expiring the old Devbox.
-
-## Verification
-
-Without credentials, the container must fail closed before Symphony starts. With secret-backed environment variables present, verify:
-
-```sh
-mise --version
-fnox --version
-pitchfork --version
-codex --version
-symphony --help
-test -w /workspaces/arrusted-development/.symphony/workspaces
-```
-
-Do not print the environment, run `set -x`, or include dashboard screenshots that might contain issue data or credentials during verification.
+Choose a reviewed upstream commit, update `SYMPHONY_COMMIT` in `Dockerfile`, rebuild the image, and recreate the container on the existing instance. Verify the dashboard and a non-destructive Linear query before removing the previous container image.

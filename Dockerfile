@@ -97,8 +97,9 @@ COPY config/fnox.toml /etc/fnox/config.toml
 COPY config/pitchfork.toml /etc/pitchfork/config.toml
 COPY bin/symphony /usr/local/bin/symphony
 COPY bin/container-entrypoint /usr/local/bin/container-entrypoint
+COPY bin/git-credential-github-token /usr/local/bin/git-credential-github-token
 
-RUN chmod 0755 /usr/local/bin/symphony /usr/local/bin/container-entrypoint \
+RUN chmod 0755 /usr/local/bin/symphony /usr/local/bin/container-entrypoint /usr/local/bin/git-credential-github-token \
     && mkdir -p /workspaces/arrusted-development /var/lib/pitchfork \
     && chown -R devbox:devbox \
         /workspaces \

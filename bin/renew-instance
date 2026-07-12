@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+instance_id=${1:?usage: renew-instance INSTANCE_ID [MINIMUM_DURATION]}
+minimum=${2:-2h}
+exec nsc extend "$instance_id" --ensure_minimum "$minimum"
