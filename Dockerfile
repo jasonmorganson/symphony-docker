@@ -30,6 +30,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        gh \
         jq \
         libncurses-dev \
         libssl-dev \
@@ -40,6 +41,7 @@ RUN apt-get update \
         unzip \
         xz-utils \
     && rm -rf /var/lib/apt/lists/* \
+    && gh --version \
     && adduser --disabled-password --gecos "" --uid 1001 devbox \
     && echo "devbox ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/devbox \
     && chmod 0440 /etc/sudoers.d/devbox

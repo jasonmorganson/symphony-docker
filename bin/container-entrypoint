@@ -1,22 +1,87 @@
 #!/bin/sh
 set -eu
 
-checkout=/workspaces/arrusted-development
-workflow=$checkout/WORKFLOW.md
+checkout=${ARRUSTED_CHECKOUT:-/workspaces/arrusted-development}
+workspace_parent=${ARRUSTED_WORKSPACE_PARENT:-/workspaces}
+repository_url=${ARRUSTED_REPOSITORY_URL:-https://github.com/withAutograph/arrusted-development.git}
+git_bin=${GIT_BIN:-git}
+gh_bin=${GH_BIN:-gh}
 
-if [ ! -f "$workflow" ]; then
+verify_required_commands() {
+  for command_name in codex curl fnox gh git mise pitchfork; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      echo "required Symphony command is unavailable: $command_name" >&2
+      return 1
+    fi
+  done
+}
+
+verify_checkout_contract() {
+  for required_path in AGENTS.md WORKFLOW.md docs/README.md; do
+    if [ ! -f "$checkout/$required_path" ]; then
+      echo "Arrusted checkout is missing required root file: $required_path" >&2
+      return 1
+    fi
+  done
+  if [ "$("$git_bin" -C "$checkout" remote get-url origin)" != "$repository_url" ]; then
+    echo "Arrusted checkout origin does not match the configured repository" >&2
+    return 1
+  fi
+}
+
+bootstrap_checkout() {
+  if [ -f "$checkout/WORKFLOW.md" ]; then
+    verify_checkout_contract
+    return
+  fi
+
   : "${GITHUB_TOKEN:?GITHUB_TOKEN is required to clone the Arrusted repository}"
   if [ -n "$(find "$checkout" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-    echo "Refusing to clone into non-empty checkout without $workflow" >&2
-    exit 1
+    echo "Refusing to clone into non-empty checkout without $checkout/WORKFLOW.md" >&2
+    return 1
   fi
+
+  bootstrap_dir="$(mktemp -d "$workspace_parent/.arrusted-bootstrap.XXXXXX")"
+  "$git_bin" clone "$repository_url" "$bootstrap_dir" || {
+    status=$?
+    rm -rf "$bootstrap_dir"
+    return "$status"
+  }
+  old_checkout=$checkout
+  checkout=$bootstrap_dir
+  verify_checkout_contract || {
+    status=$?
+    checkout=$old_checkout
+    rm -rf "$bootstrap_dir"
+    return "$status"
+  }
+  checkout=$old_checkout
+
+  rmdir "$checkout"
+  mv "$bootstrap_dir" "$checkout"
+}
+
+verify_github_access() {
+  : "${GITHUB_TOKEN:?GITHUB_TOKEN is required for GitHub access}"
+  "$gh_bin" auth status --hostname github.com >/dev/null
+  "$git_bin" ls-remote --exit-code "$repository_url" HEAD >/dev/null
+}
+
+main() {
+  mkdir -p "$workspace_parent" "$checkout"
+  cd "$workspace_parent"
+  verify_required_commands
   git config --global credential.helper /usr/local/bin/git-credential-github-token
-  git clone https://github.com/withAutograph/arrusted-development.git "$checkout"
+  git config --global url.https://github.com/.insteadOf git@github.com:
+  bootstrap_checkout
+  verify_github_access
+  cd "$checkout"
+  printf '%s' "$OPENAI_API_KEY" | codex login --with-api-key >/dev/null
+  mkdir -p "$SYMPHONY_WORKSPACE_ROOT"
+
+  exec pitchfork supervisor run --container --boot --force
+}
+
+if [ "${0##*/}" = container-entrypoint ]; then
+  main "$@"
 fi
-
-git config --global credential.helper /usr/local/bin/git-credential-github-token
-git config --global url.https://github.com/.insteadOf git@github.com:
-printf '%s' "$OPENAI_API_KEY" | codex login --with-api-key >/dev/null
-mkdir -p "$SYMPHONY_WORKSPACE_ROOT"
-
-exec pitchfork supervisor run --container --boot --force

@@ -9,6 +9,7 @@ This deployment is separate from `symphony-k8s`. It runs one Docker container on
 - OpenAI Symphony pinned to `4cbe3a9699a73b862466c0b157ceca0c1985d6d7`
 - Erlang 28.5 and Elixir 1.19.5-otp-28
 - Codex CLI 0.144.1
+- GitHub CLI from Ubuntu 24.04
 - mise 2026.7.5
 - fnox 1.28.0
 - Pitchfork 2.15.0
@@ -82,6 +83,11 @@ ssh VM docker ps --filter name=symphony
 ```
 
 Pitchfork handles `SIGTERM` and `SIGINT`, gracefully shuts down Symphony, and reaps orphaned processes. fnox fails closed if any of `LINEAR_API_KEY`, `OPENAI_API_KEY`, or `GITHUB_TOKEN` is missing.
+
+Container startup also fails closed unless the required CLI set is present,
+GitHub authentication can read the Arrusted repository, and the checkout has
+the expected repository identity and root contract files. Failed first clones
+are removed instead of leaving a partial checkout that poisons later starts.
 
 ## Upgrade Symphony
 
